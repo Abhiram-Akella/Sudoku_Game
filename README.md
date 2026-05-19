@@ -4,13 +4,16 @@ A production-ready daily Sudoku game — same puzzle for all players each day, w
 
 ## Features
 
-- **Daily puzzle** — deterministic seed from date; everyone gets the same puzzle
+- **Daily puzzle** — deterministic seed from date; everyone gets the same puzzle. Loads the completed board on page reload if already solved.
 - **Difficulty** — Easy / Medium / Hard tabs (changes clue count)
 - **Error highlighting** — conflicting cells flash red instantly
-- **Region completion** — row, column or box flashes green for 0.5s when completed correctly
+- **Region completion** — row, column or box flashes green for 0.5s when completed correctly (strictly verified against solution)
 - **Hints** — 3 hints per session; fetches the correct value from the server
-- **Leaderboard** — sorted by time (then name); auto-resets at 23:59:59 UTC via Redis TTL
-- **No accounts** — username entered once, saved to localStorage
+- **Leaderboard** — sorted by time; auto-resets at 23:59:59 UTC via Redis TTL. Supports duplicate usernames securely with unique client-side `userId` tracking.
+- **No accounts** — username entered once, saved to localStorage alongside a generated `userId`
+- **Input Mode (Numpad Selection)** — select a number from the numpad to keep it locked, and click any empty cells to insert it repeatedly.
+- **Same Number Highlighting** — clicking any filled cell instantly highlights all other instances of that number on the board.
+- **Centered Layout & Sliding Transition** — the puzzle is centered on screen while solving, smoothly sliding left to reveal the leaderboard on complete.
 - **Keyboard support** — arrows to navigate, 1-9 to fill, Backspace to erase
 
 ## Architecture
