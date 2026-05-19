@@ -46,14 +46,14 @@ export function UsernameModal({ onSubmit }) {
   );
 }
 
-export function CompletedModal({ username, timeMs, leaderboard, onClose }) {
+export function CompletedModal({ username, userId, timeMs, leaderboard, onClose }) {
   const formatTime = (ms) => {
     const s = Math.floor(ms / 1000);
     const m = Math.floor(s / 60).toString().padStart(2, '0');
     return `${m}:${(s % 60).toString().padStart(2, '0')}`;
   };
 
-  const myEntry = leaderboard.find(e => e.username === username);
+  const myEntry = leaderboard.find(e => e.userId ? e.userId === userId : e.username === username);
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="complete-title">

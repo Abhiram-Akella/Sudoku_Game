@@ -37,22 +37,23 @@ export default function SudokuGrid({
   puzzle,
   board,
   selected,
+  highlightNumber,
   onSelect,
   flashCells,
   hintsSet,
   errors,
 }) {
-  const selectedVal = selected ? board[selected.r][selected.c] : null;
-
-  const getHighlightState = (r, c) => {
-    if (!selected) return { highlighted: false, sameNum: false };
-    const isSameRow = r === selected.r;
-    const isSameCol = c === selected.c;
-    const isSameBox =
-      Math.floor(r / 3) === Math.floor(selected.r / 3) &&
-      Math.floor(c / 3) === Math.floor(selected.c / 3);
-    const highlighted = isSameRow || isSameCol || isSameBox;
-    const sameNum = selectedVal && board[r][c] === selectedVal && !(r === selected.r && c === selected.c);
+  const getHighlightState = (r, c, val) => {
+    let highlighted = false;
+    if (selected) {
+      const isSameRow = r === selected.r;
+      const isSameCol = c === selected.c;
+      const isSameBox =
+        Math.floor(r / 3) === Math.floor(selected.r / 3) &&
+        Math.floor(c / 3) === Math.floor(selected.c / 3);
+      highlighted = isSameRow || isSameCol || isSameBox;
+    }
+    const sameNum = highlightNumber !== null && val === highlightNumber;
     return { highlighted, sameNum };
   };
 
@@ -73,7 +74,7 @@ export default function SudokuGrid({
           {board[r].map((val, c) => {
             const key = `${r}-${c}`;
             const isSelected = selected?.r === r && selected?.c === c;
-            const { highlighted, sameNum } = getHighlightState(r, c);
+            const { highlighted, sameNum } = getHighlightState(r, c, val || puzzle[r][c]);
             const altBox = isAltBox(r, c);
             const cls = [
               'sudoku-cell',

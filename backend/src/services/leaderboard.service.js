@@ -33,19 +33,22 @@ function secondsUntilEndOfDay() {
 /**
  * Submit a score to the leaderboard.
  * @param {string} dateStr   - YYYY-MM-DD
+ * @param {string} userId    - unique identifier for the user
  * @param {string} username  - player name
  * @param {number} timeMs    - time taken in milliseconds
  */
-async function submitScore(dateStr, username, timeMs) {
+async function submitScore(dateStr, userId, username, timeMs) {
   const key = leaderboardKey(dateStr);
   const ttl = secondsUntilEndOfDay();
+
+  const member = userId ? `${userId}:::${username}` : username;
 
   // Store username -> best time (lower is better, use score = timeMs)
   // Redis ZADD NX only adds if not exists; we want to keep best time
   // Use ZADD with LT flag to only update if new score is lower
-  const existing = await redis.zscore(key, username);
+  const existing = await redis.zscore(key, member);
   if (existing === null || parseFloat(existing) > timeMs) {
-    await redis.zadd(key, timeMs, username);
+    await redis.zadd(key, timeMs, member);
   }
 
   // Ensure TTL is always refreshed
@@ -60,7 +63,7 @@ async function submitScore(dateStr, username, timeMs) {
 
 /**
  * Get the full leaderboard for a date, sorted by time ascending then name ascending.
- * Returns array of { rank, username, timeMs }
+ * Returns array of { rank, userId, username, timeMs }
  */
 async function getLeaderboard(dateStr) {
   const key = leaderboardKey(dateStr);
@@ -69,8 +72,18 @@ async function getLeaderboard(dateStr) {
 
   const entries = [];
   for (let i = 0; i < raw.length; i += 2) {
+    const member = raw[i];
+    let userId = null;
+    let username = member;
+    if (member.includes(':::')) {
+      const parts = member.split(':::');
+      userId = parts[0];
+      username = parts.slice(1).join(':::');
+    }
+
     entries.push({
-      username: raw[i],
+      userId,
+      username,
       timeMs: parseFloat(raw[i + 1]),
     });
   }
@@ -87,9 +100,10 @@ async function getLeaderboard(dateStr) {
 /**
  * Check if a username already has a score for today
  */
-async function getUserScore(dateStr, username) {
+async function getUserScore(dateStr, userId, username) {
   const key = leaderboardKey(dateStr);
-  const score = await redis.zscore(key, username);
+  const member = userId ? `${userId}:::${username}` : username;
+  const score = await redis.zscore(key, member);
   return score !== null ? parseFloat(score) : null;
 }
 

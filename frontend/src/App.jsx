@@ -25,12 +25,22 @@ export default function App() {
   const [board, setBoard]               = useState(null);
   const [puzzleDifficulty, setPuzzleDifficulty] = useState('');
   const [selected, setSelected]         = useState(null);
+  const [selectedNumber, setSelectedNumber] = useState(null);
+  const [highlightNumber, setHighlightNumber] = useState(null);
   const [errors, setErrors]             = useState(new Set());
   const [flashCells, setFlashCells]     = useState(new Set());
   const [hintsSet, setHintsSet]         = useState(new Set());
   const [hintsUsed, setHintsUsed]       = useState(0);
   const [completedRegions, setCompleted]= useState({ rows: [], cols: [], boxes: [] });
   const [username, setUsername]         = useState(() => localStorage.getItem(USERNAME_KEY) || '');
+  const [userId]                        = useState(() => {
+    let id = localStorage.getItem('sudoku_userId');
+    if (!id) {
+      id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('sudoku_userId', id);
+    }
+    return id;
+  });
   const [showUsernameModal, setShowUsername] = useState(false);
   const [showCompleted, setShowCompleted]    = useState(false);
   const [leaderboard, setLeaderboard]   = useState([]);
@@ -71,7 +81,7 @@ export default function App() {
     if (!name) return;
 
     try {
-      const data = await api.submitComplete(name, timeMs, finalBoard);
+      const data = await api.submitComplete(userId, name, timeMs, finalBoard);
       setLeaderboard(data.leaderboard || []);
       setShowCompleted(true);
     } catch (err) {
@@ -79,7 +89,7 @@ export default function App() {
       setShowCompleted(true);
       fetchLeaderboard();
     }
-  }, [elapsed, stopTimer, completedKey, username, addToast, fetchLeaderboard]);
+  }, [elapsed, stopTimer, completedKey, username, userId, addToast, fetchLeaderboard]);
 
   // ── Load puzzle ────────────────────────────────────────────────
   const loadPuzzle = useCallback(async (diff) => {
@@ -95,15 +105,14 @@ export default function App() {
 
     try {
       const data = await api.getPuzzle();
-      const boardCopy = data.puzzle.map(r => [...r]);
       setPuzzle(data.puzzle);
       setSolution(data.solution);
-      setBoard(boardCopy);
       setPuzzleDifficulty(data.difficulty);
 
       // If user has already completed today's puzzle, don't re-show
       const alreadyDone = localStorage.getItem(completedKey);
       if (!alreadyDone) {
+        setBoard(data.puzzle.map(r => [...r]));
         // Prompt username if not set
         if (!localStorage.getItem(USERNAME_KEY)) {
           setShowUsername(true);
@@ -111,6 +120,7 @@ export default function App() {
           startTimer();
         }
       } else {
+        setBoard(data.solution.map(r => [...r]));
         setGameOver(true);
         setFinalTime(parseInt(alreadyDone, 10));
       }
@@ -133,16 +143,9 @@ export default function App() {
     startTimer();
   };
 
-  // ── Cell selection ─────────────────────────────────────────────
-  const handleSelect = useCallback((r, c) => {
-    if (gameOver) return;
-    setSelected({ r, c });
-  }, [gameOver]);
-
   // ── Number input ───────────────────────────────────────────────
-  const handleNumberInput = useCallback((num) => {
-    if (!selected || gameOver || !board || !puzzle) return;
-    const { r, c } = selected;
+  const handleNumberInputInternal = useCallback((num, r, c) => {
+    if (gameOver || !board || !puzzle) return;
     if (puzzle[r][c] !== 0) return; // given cell
 
     const newBoard = board.map(row => [...row]);
@@ -152,39 +155,42 @@ export default function App() {
     // Validate errors
     const newErrors = findErrors(newBoard);
     setErrors(newErrors);
+    
+    // If filling a number, also highlight it
+    if (num !== 0) setHighlightNumber(num);
 
     // Check completed regions
     if (num !== 0 && solution) {
       const newlyCompleted = findCompletedRegions(newBoard, completedRegions);
 
+      const correctlyCompleted = {
+        rows: newlyCompleted.rows.filter(row => newBoard[row].every((v, idx) => v === solution[row][idx])),
+        cols: newlyCompleted.cols.filter(col => newBoard.every((row, idx) => row[col] === solution[idx][col])),
+        boxes: newlyCompleted.boxes.filter(box => {
+          const br = Math.floor(box / 3) * 3;
+          const bc = (box % 3) * 3;
+          for (let rr = br; rr < br + 3; rr++) {
+            for (let cc = bc; cc < bc + 3; cc++) {
+              if (newBoard[rr][cc] !== solution[rr][cc]) return false;
+            }
+          }
+          return true;
+        })
+      };
+
       const flashSet = new Set();
-      newlyCompleted.rows.forEach(row => {
-        // Verify against solution
-        const isCorrect = newBoard[row].every((v, c) => v === solution[row][c]);
-        if (isCorrect) {
-          for (let c2 = 0; c2 < 9; c2++) flashSet.add(`${row}-${c2}`);
-        }
+      correctlyCompleted.rows.forEach(row => {
+        for (let c2 = 0; c2 < 9; c2++) flashSet.add(`${row}-${c2}`);
       });
-      newlyCompleted.cols.forEach(col => {
-        const isCorrect = newBoard.every((r, i) => r[col] === solution[i][col]);
-        if (isCorrect) {
-          for (let r2 = 0; r2 < 9; r2++) flashSet.add(`${r2}-${col}`);
-        }
+      correctlyCompleted.cols.forEach(col => {
+        for (let r2 = 0; r2 < 9; r2++) flashSet.add(`${r2}-${col}`);
       });
-      newlyCompleted.boxes.forEach(box => {
+      correctlyCompleted.boxes.forEach(box => {
         const br = Math.floor(box / 3) * 3;
         const bc = (box % 3) * 3;
-        let isCorrect = true;
-        for (let rr = br; rr < br + 3; rr++) {
-          for (let cc = bc; cc < bc + 3; cc++) {
-            if (newBoard[rr][cc] !== solution[rr][cc]) isCorrect = false;
-          }
-        }
-        if (isCorrect) {
-          for (let rr = br; rr < br + 3; rr++)
-            for (let cc = bc; cc < bc + 3; cc++)
-              flashSet.add(`${rr}-${cc}`);
-        }
+        for (let rr = br; rr < br + 3; rr++)
+          for (let cc = bc; cc < bc + 3; cc++)
+            flashSet.add(`${rr}-${cc}`);
       });
 
       if (flashSet.size > 0) {
@@ -192,12 +198,11 @@ export default function App() {
         setTimeout(() => setFlashCells(new Set()), 500);
       }
       
-      // Update completed regions state regardless of correctness so we don't spam checks
-      if (newlyCompleted.rows.length || newlyCompleted.cols.length || newlyCompleted.boxes.length) {
+      if (correctlyCompleted.rows.length || correctlyCompleted.cols.length || correctlyCompleted.boxes.length) {
         setCompleted(prev => ({
-          rows: [...prev.rows, ...newlyCompleted.rows],
-          cols: [...prev.cols, ...newlyCompleted.cols],
-          boxes: [...prev.boxes, ...newlyCompleted.boxes],
+          rows: [...prev.rows, ...correctlyCompleted.rows],
+          cols: [...prev.cols, ...correctlyCompleted.cols],
+          boxes: [...prev.boxes, ...correctlyCompleted.boxes],
         }));
       }
     }
@@ -206,7 +211,33 @@ export default function App() {
     if (isBoardFilled(newBoard) && newErrors.size === 0) {
       handlePuzzleComplete(newBoard);
     }
-  }, [selected, gameOver, board, puzzle, solution, completedRegions, handlePuzzleComplete]);
+  }, [gameOver, board, puzzle, solution, completedRegions, handlePuzzleComplete]);
+
+  // ── Cell selection ─────────────────────────────────────────────
+  const handleSelect = useCallback((r, c) => {
+    if (gameOver || !board) return;
+    const cellValue = board[r][c];
+
+    if (cellValue !== 0) {
+      setHighlightNumber(cellValue);
+      setSelected({ r, c });
+    } else {
+      setHighlightNumber(null);
+      if (selectedNumber) {
+        handleNumberInputInternal(selectedNumber, r, c);
+      } else {
+        setSelected({ r, c });
+      }
+    }
+  }, [gameOver, board, selectedNumber, handleNumberInputInternal]);
+
+  const handleNumpadClick = useCallback((num) => {
+    setSelectedNumber(prev => prev === num ? null : num);
+    if (selected && puzzle && puzzle[selected.r][selected.c] === 0) {
+      handleNumberInputInternal(num, selected.r, selected.c);
+      setSelected(null);
+    }
+  }, [selected, puzzle, handleNumberInputInternal]);
 
 
   // ── Hint ───────────────────────────────────────────────────────
@@ -242,33 +273,34 @@ export default function App() {
       // Also check for completed regions — green flash on hints too
       if (solution) {
         const newlyCompleted = findCompletedRegions(newBoard, completedRegions);
+        const correctlyCompleted = {
+          rows: newlyCompleted.rows.filter(row => newBoard[row].every((v, idx) => v === solution[row][idx])),
+          cols: newlyCompleted.cols.filter(col => newBoard.every((row, idx) => row[col] === solution[idx][col])),
+          boxes: newlyCompleted.boxes.filter(box => {
+            const br = Math.floor(box / 3) * 3;
+            const bc = (box % 3) * 3;
+            for (let rr = br; rr < br + 3; rr++) {
+              for (let cc = bc; cc < bc + 3; cc++) {
+                if (newBoard[rr][cc] !== solution[rr][cc]) return false;
+              }
+            }
+            return true;
+          })
+        };
+
         const flashSet = new Set();
-        newlyCompleted.rows.forEach(row => {
-          const isCorrect = newBoard[row].every((v, c) => v === solution[row][c]);
-          if (isCorrect) {
-            for (let c2 = 0; c2 < 9; c2++) flashSet.add(`${row}-${c2}`);
-          }
+        correctlyCompleted.rows.forEach(row => {
+          for (let c2 = 0; c2 < 9; c2++) flashSet.add(`${row}-${c2}`);
         });
-        newlyCompleted.cols.forEach(col => {
-          const isCorrect = newBoard.every((r, i) => r[col] === solution[i][col]);
-          if (isCorrect) {
-            for (let r2 = 0; r2 < 9; r2++) flashSet.add(`${r2}-${col}`);
-          }
+        correctlyCompleted.cols.forEach(col => {
+          for (let r2 = 0; r2 < 9; r2++) flashSet.add(`${r2}-${col}`);
         });
-        newlyCompleted.boxes.forEach(box => {
+        correctlyCompleted.boxes.forEach(box => {
           const br = Math.floor(box / 3) * 3;
           const bc = (box % 3) * 3;
-          let isCorrect = true;
-          for (let rr = br; rr < br + 3; rr++) {
-            for (let cc = bc; cc < bc + 3; cc++) {
-              if (newBoard[rr][cc] !== solution[rr][cc]) isCorrect = false;
-            }
-          }
-          if (isCorrect) {
-            for (let rr = br; rr < br + 3; rr++)
-              for (let cc = bc; cc < bc + 3; cc++)
-                flashSet.add(`${rr}-${cc}`);
-          }
+          for (let rr = br; rr < br + 3; rr++)
+            for (let cc = bc; cc < bc + 3; cc++)
+              flashSet.add(`${rr}-${cc}`);
         });
 
         if (flashSet.size > 0) {
@@ -276,11 +308,11 @@ export default function App() {
           setTimeout(() => setFlashCells(new Set()), 500);
         }
 
-        if (newlyCompleted.rows.length || newlyCompleted.cols.length || newlyCompleted.boxes.length) {
+        if (correctlyCompleted.rows.length || correctlyCompleted.cols.length || correctlyCompleted.boxes.length) {
           setCompleted(prev => ({
-            rows: [...prev.rows, ...newlyCompleted.rows],
-            cols: [...prev.cols, ...newlyCompleted.cols],
-            boxes: [...prev.boxes, ...newlyCompleted.boxes],
+            rows: [...prev.rows, ...correctlyCompleted.rows],
+            cols: [...prev.cols, ...correctlyCompleted.cols],
+            boxes: [...prev.boxes, ...correctlyCompleted.boxes],
           }));
         }
       }
@@ -325,7 +357,7 @@ export default function App() {
   useEffect(() => {
     const handler = (e) => {
       if (!selected) return;
-      if (e.key >= '1' && e.key <= '9') handleNumberInput(parseInt(e.key, 10));
+      if (e.key >= '1' && e.key <= '9') handleNumberInputInternal(parseInt(e.key, 10), selected.r, selected.c);
       if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') handleErase();
       if (e.key === 'ArrowUp')    setSelected(s => s && { r: Math.max(0, s.r - 1), c: s.c });
       if (e.key === 'ArrowDown')  setSelected(s => s && { r: Math.min(8, s.r + 1), c: s.c });
@@ -334,14 +366,10 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selected, handleNumberInput, handleErase]);
+  }, [selected, handleNumberInputInternal, handleErase]);
 
   // ── Progress calculation ───────────────────────────────────────
-  const filledCount = board ? board.flat().filter(v => v !== 0).length : 0;
-  const givenCount  = puzzle ? puzzle.flat().filter(v => v !== 0).length : 0;
-  const totalEmpty  = 81 - givenCount;
-  const userFilled  = filledCount - givenCount;
-  const progress    = totalEmpty > 0 ? Math.round((userFilled / totalEmpty) * 100) : 0;
+  // Progress calculation removed as per user request
 
   // ── Render ─────────────────────────────────────────────────────
   if (loading) {
@@ -400,6 +428,7 @@ export default function App() {
                 puzzle={puzzle}
                 board={board}
                 selected={selected}
+                highlightNumber={highlightNumber}
                 onSelect={handleSelect}
                 flashCells={flashCells}
                 hintsSet={hintsSet}
@@ -413,8 +442,8 @@ export default function App() {
                 <button
                   key={n}
                   id={`num-${n}`}
-                  className="numpad-btn"
-                  onClick={() => handleNumberInput(n)}
+                  className={`numpad-btn ${selectedNumber === n ? 'active-num' : ''}`}
+                  onClick={() => handleNumpadClick(n)}
                   disabled={gameOver}
                   aria-label={`Enter ${n}`}
                 >
@@ -463,32 +492,16 @@ export default function App() {
         </section>
 
         {/* Right panel */}
-        <aside className="right-panel" aria-label="Stats and leaderboard">
-          {/* Progress card */}
-          <div className="card status-card">
-            <div className="status-row">
-              <span className="status-label">Progress</span>
-              <span className="status-val" style={{ color: 'var(--accent)' }}>{progress}%</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="status-row" style={{ marginTop: '0.4rem' }}>
-              <span className="status-label">Errors</span>
-              <span className="status-val" style={{ color: errors.size > 0 ? 'var(--red)' : 'var(--green)' }}>
-                {errors.size > 0 ? `${errors.size} error cell${errors.size !== 1 ? 's' : ''}` : '✓ Clean'}
-              </span>
-            </div>
-          </div>
-
-          {/* Leaderboard */}
-          <Leaderboard
-            entries={leaderboard}
-            username={username}
-            loading={lbLoading}
-            onRefresh={fetchLeaderboard}
-          />
-        </aside>
+        {gameOver && (
+          <aside className="right-panel leaderboard-slide-in" aria-label="Stats and leaderboard">
+            <Leaderboard
+              entries={leaderboard}
+              currentUserId={userId}
+              loading={lbLoading}
+              onRefresh={fetchLeaderboard}
+            />
+          </aside>
+        )}
       </main>
 
       {/* Modals */}
@@ -498,6 +511,7 @@ export default function App() {
       {showCompleted && (
         <CompletedModal
           username={username}
+          userId={userId}
           timeMs={finalTime}
           leaderboard={leaderboard}
           onClose={() => setShowCompleted(false)}

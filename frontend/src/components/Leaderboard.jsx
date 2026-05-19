@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatTime } from '../utils/sudoku';
 
-export default function Leaderboard({ entries, username, loading, onRefresh }) {
+export default function Leaderboard({ entries, currentUserId, loading, onRefresh }) {
   const medalIcon = (rank) => {
     if (rank === 1) return '🥇';
     if (rank === 2) return '🥈';
@@ -39,11 +39,12 @@ export default function Leaderboard({ entries, username, loading, onRefresh }) {
             {loading ? 'Loading…' : 'No completions yet today. Be the first! 🚀'}
           </div>
         ) : (
-          entries.map((e) => {
-            const isMe = e.username === username;
+          entries.map((e, index) => {
+            // Identify if this is the current user's entry using userId if available, fallback to username
+            const isMe = currentUserId && e.userId ? e.userId === currentUserId : false;
             return (
               <div
-                key={e.username}
+                key={e.userId || `${e.username}-${index}`}
                 className={`lb-entry${isMe ? ' is-me' : ''}`}
                 id={`lb-${e.username.replace(/\s+/g, '-')}`}
               >

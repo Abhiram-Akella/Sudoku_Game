@@ -96,11 +96,11 @@ router.get('/leaderboard', async (req, res) => {
 /**
  * POST /api/puzzle/complete
  * Submit a completed puzzle score
- * Body: { username: string, timeMs: number, board: number[][] }
+ * Body: { userId: string, username: string, timeMs: number, board: number[][] }
  */
 router.post('/complete', async (req, res) => {
   const dateStr = getTodayString();
-  const { username, timeMs, board } = req.body;
+  const { userId, username, timeMs, board } = req.body;
 
   if (!username || typeof username !== 'string' || username.trim().length < 1) {
     return res.status(400).json({ success: false, message: 'Invalid username' });
@@ -124,9 +124,10 @@ router.post('/complete', async (req, res) => {
   }
 
   const cleanName = username.trim().slice(0, 30);
+  const cleanUserId = userId ? String(userId).trim() : null;
 
   try {
-    await leaderboardService.submitScore(dateStr, cleanName, timeMs);
+    await leaderboardService.submitScore(dateStr, cleanUserId, cleanName, timeMs);
     const entries = await leaderboardService.getLeaderboard(dateStr);
     res.json({ success: true, leaderboard: entries });
   } catch (err) {

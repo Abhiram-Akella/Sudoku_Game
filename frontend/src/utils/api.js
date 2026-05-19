@@ -19,8 +19,8 @@ export const api = {
   getHint: (row, col) =>
     request('GET', `/puzzle/hint?row=${row}&col=${col}`),
 
-  submitComplete: (username, timeMs, board) =>
-    request('POST', '/puzzle/complete', { username, timeMs, board }),
+  submitComplete: (userId, username, timeMs, board) =>
+    request('POST', '/puzzle/complete', { userId, username, timeMs, board }),
 
   getLeaderboard: () =>
     request('GET', '/puzzle/leaderboard'),
