@@ -25,12 +25,17 @@ services:
         value: "" # Will be filled with the frontend URL once deployed, or left blank to allow '*' fallback
 
   # Frontend Vite Static Site
-  - type: static
+  - type: web
     name: sudoku-frontend
-    env: static
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
-    publishDir: dist
+    publishPath: dist
+    routes:
+      - path: /*
+        destination: /index.html
+        type: rewrite
     envVars:
       - key: VITE_API_URL
         value: "" # MUST be set to: https://sudoku-backend.onrender.com/api (replace with your actual backend URL)
+
