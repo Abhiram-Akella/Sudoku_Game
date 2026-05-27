@@ -1,0 +1,36 @@
+services:
+  # Redis database for leaderboards & caching
+  - type: redis
+    name: sudoku-redis
+    plan: free
+    ipAllowList: [] # Allows only internal connections within Render for security
+
+  # Backend Express API Web Service
+  - type: web
+    name: sudoku-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromService:
+          name: sudoku-redis
+          type: redis
+          property: connectionString
+      - key: CORS_ORIGIN
+        value: "" # Will be filled with the frontend URL once deployed, or left blank to allow '*' fallback
+
+  # Frontend Vite Static Site
+  - type: static
+    name: sudoku-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        value: "" # MUST be set to: https://sudoku-backend.onrender.com/api (replace with your actual backend URL)
