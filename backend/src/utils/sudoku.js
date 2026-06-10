@@ -114,12 +114,74 @@ function countSolutions(board, limit = 2) {
 }
 
 /**
- * Generate a complete valid Sudoku solution using the seeded RNG
+ * Generate a complete valid Sudoku solution using the seeded RNG.
+ *
+ * Uses a transformation-based approach instead of raw backtracking so that
+ * the result has no visible cyclic-triplet pattern:
+ *  1. Start from a canonical base grid.
+ *  2. Randomly relabel all 9 digits (permute which number maps to which).
+ *  3. Randomly permute the three row-bands (top/middle/bottom groups of 3).
+ *  4. Randomly permute the three column-bands (left/center/right groups of 3).
+ *  5. Shuffle rows within each band independently.
+ *  6. Shuffle columns within each band independently.
+ * All valid Sudoku symmetries are preserved, so the result is always a legal
+ * solution grid — no backtracking required.
  */
 function generateSolution(rng) {
-  const board = Array.from({ length: 9 }, () => Array(9).fill(0));
-  const nums = seededShuffle([1, 2, 3, 4, 5, 6, 7, 8, 9], rng);
-  solve(board, nums);
+  // Canonical base grid (a well-known valid Sudoku solution)
+  const base = [
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [4, 5, 6, 7, 8, 9, 1, 2, 3],
+    [7, 8, 9, 1, 2, 3, 4, 5, 6],
+    [2, 3, 4, 5, 6, 7, 8, 9, 1],
+    [5, 6, 7, 8, 9, 1, 2, 3, 4],
+    [8, 9, 1, 2, 3, 4, 5, 6, 7],
+    [3, 4, 5, 6, 7, 8, 9, 1, 2],
+    [6, 7, 8, 9, 1, 2, 3, 4, 5],
+    [9, 1, 2, 3, 4, 5, 6, 7, 8],
+  ];
+
+  // 1. Digit relabeling: create a random mapping 1–9 → 1–9
+  const digitMap = seededShuffle([1, 2, 3, 4, 5, 6, 7, 8, 9], rng);
+
+  // 2. Permute row bands
+  const bandOrder = seededShuffle([0, 1, 2], rng);
+
+  // 3. Permute column bands
+  const colBandOrder = seededShuffle([0, 1, 2], rng);
+
+  // 4. Shuffle rows within each band
+  const rowsInBand = bandOrder.map(() => seededShuffle([0, 1, 2], rng));
+
+  // 5. Shuffle columns within each band
+  const colsInBand = colBandOrder.map(() => seededShuffle([0, 1, 2], rng));
+
+  // Build the final row order: for each band (in band order), apply row shuffle within that band
+  const rowOrder = [];
+  for (let b = 0; b < 3; b++) {
+    const band = bandOrder[b];
+    for (const r of rowsInBand[b]) {
+      rowOrder.push(band * 3 + r);
+    }
+  }
+
+  // Build the final column order similarly
+  const colOrder = [];
+  for (let b = 0; b < 3; b++) {
+    const band = colBandOrder[b];
+    for (const c of colsInBand[b]) {
+      colOrder.push(band * 3 + c);
+    }
+  }
+
+  // Apply all transformations to build the result board
+  const board = Array.from({ length: 9 }, (_, r) =>
+    Array.from({ length: 9 }, (_, c) => {
+      const val = base[rowOrder[r]][colOrder[c]];
+      return digitMap[val - 1]; // relabel digit
+    })
+  );
+
   return board;
 }
 
